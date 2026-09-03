@@ -95,7 +95,6 @@ export default function MapComponent({
   onMapClick, 
   selectedLocation, 
   onSelectReport, 
-  activeReport, 
   mapCenter 
 }) {
   const [userLocation, setUserLocation] = useState(null)

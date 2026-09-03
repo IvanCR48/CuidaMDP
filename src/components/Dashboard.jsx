@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { getCategoryIcon } from './ReportList'
+import { getCategoryIcon } from '../constants/categories'
 import { BarChart3, PieChart, TrendingUp, CheckCircle, Clock, AlertTriangle, Star } from 'lucide-react'
 
 export default function Dashboard({ reports }) {

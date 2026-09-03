@@ -1,43 +1,8 @@
 import React, { useState } from 'react'
-import { Search, SlidersHorizontal, AlertTriangle, Lightbulb, Trash2, Footprints, Droplets, HelpCircle, ArrowUp, Calendar, MapPin } from 'lucide-react'
-
-// Iconos por categoría
-export const getCategoryIcon = (category, size = 18) => {
-  switch (category) {
-    case 'calles':
-      return <AlertTriangle size={size} style={{ color: 'var(--text-muted)' }} />
-    case 'alumbrado':
-      return <Lightbulb size={size} style={{ color: '#eab308' }} />
-    case 'limpieza':
-      return <Trash2 size={size} style={{ color: '#22c55e' }} />
-    case 'veredas':
-      return <Footprints size={size} style={{ color: '#f97316' }} />
-    case 'pluviales':
-      return <Droplets size={size} style={{ color: '#3b82f6' }} />
-    default:
-      return <HelpCircle size={size} style={{ color: '#a855f7' }} />
-  }
-}
-
-const NEIGHBORHOODS = [
-  'Centro',
-  'Stella Maris / Los Troncos',
-  'Playa Grande / Alem',
-  'La Perla / Constitución',
-  'Puerto / Colinas de Peralta Ramos',
-  'Punta Mogotes',
-  'Chauvín / San José',
-  'Caisamar / Grosellar',
-  'Pompeya / Estación',
-  'Batán',
-  'Sierra de los Padres',
-  'Parque Camet / Las Dalias',
-  'Plaza Mitre',
-  'Constitución',
-  'Florencia Varela / Aeropuerto',
-  'Alfar / Playas del Sur',
-  'Otro'
-].sort()
+import { Search, SlidersHorizontal, ArrowUp, Calendar, MapPin } from 'lucide-react'
+import { getCategoryIcon, getCategoryLabel } from '../constants/categories'
+import { NEIGHBORHOODS } from '../constants/neighborhoods'
+import { formatDate } from '../utils/formatters'
 
 export default function ReportList({ reports, onSelectReport, selectedReportId, onVoteReport, votedReports }) {
   const [search, setSearch] = useState('')
@@ -57,24 +22,6 @@ export default function ReportList({ reports, onSelectReport, selectedReportId, 
 
     return matchesSearch && matchesCategory && matchesNeighborhood && matchesStatus
   })
-
-  // Traducir categoría para mostrar
-  const getCategoryLabel = (cat) => {
-    switch (cat) {
-      case 'calles': return 'Calles / Baches'
-      case 'alumbrado': return 'Luminarias'
-      case 'limpieza': return 'Limpieza / Basura'
-      case 'veredas': return 'Veredas rotas'
-      case 'pluviales': return 'Pluviales'
-      default: return 'Otros'
-    }
-  }
-
-  // Formatear fecha
-  const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'short', day: 'numeric' }
-    return new Date(dateString).toLocaleDateString('es-AR', options)
-  }
 
   return (
     <div className="report-list-container">

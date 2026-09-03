@@ -1,16 +1,21 @@
 import React, { useState } from 'react'
-import { supabase } from '../supabaseClient'
-import { getCategoryIcon } from './ReportList'
 import { ArrowLeft, ArrowUp, Calendar, MapPin, CheckCircle, Image as ImageIcon, Loader2, X, AlertTriangle, ShieldCheck, ShieldAlert, Trash2, Ban } from 'lucide-react'
+import { getCategoryIcon, getCategoryLabel } from '../constants/categories'
+import { formatDate } from '../utils/formatters'
+import { compressImage } from '../utils/imageCompressor'
+import { reportsService } from '../services/reportsService'
+import { storageService } from '../services/storageService'
+import { moderationService } from '../services/moderationService'
+import { useAuth } from '../hooks/useAuth'
 
 export default function ReportDetail({ 
   report, 
   onBack, 
   onVoteReport, 
   votedReports, 
-  onStatusUpdated,
-  employeeSession 
+  onStatusUpdated 
 }) {
+  const { isEmployee } = useAuth()
   const [showResolveForm, setShowResolveForm] = useState(false)
   const [resolveImage, setResolveImage] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -19,26 +24,6 @@ export default function ReportDetail({
   const [lightboxImage, setLightboxImage] = useState(null)
 
   const hasVoted = votedReports.includes(report.id)
-  const isEmployee = !!employeeSession
-
-  // Formatear fechas
-  const formatDate = (dateString) => {
-    if (!dateString) return ''
-    const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
-    return new Date(dateString).toLocaleDateString('es-AR', options)
-  }
-
-  // Traducir categoría para mostrar
-  const getCategoryLabel = (cat) => {
-    switch (cat) {
-      case 'calles': return 'Calles / Baches'
-      case 'alumbrado': return 'Luminarias'
-      case 'limpieza': return 'Limpieza / Basura'
-      case 'veredas': return 'Veredas rotas'
-      case 'pluviales': return 'Pluviales'
-      default: return 'Otros'
-    }
-  }
 
   // Manejar cambio de imagen de resolución
   const handleImageChange = (e) => {
@@ -65,41 +50,26 @@ export default function ReportDetail({
     setError(null)
 
     try {
-      // 1. Subir la imagen de prueba al bucket
-      const fileExt = resolveImage.name.split('.').pop()
-      const fileName = `${crypto.randomUUID()}.${fileExt}`
-      const filePath = `resolutions/${fileName}`
+      // 1. Comprimir imagen en el cliente antes de subir
+      const compressedImage = await compressImage(resolveImage, { maxWidth: 1600, quality: 0.8 })
 
-      const { error: uploadError } = await supabase.storage
-        .from('report-photos')
-        .upload(filePath, resolveImage)
+      // 2. Subir la imagen de prueba al bucket
+      const publicUrl = await storageService.uploadResolutionPhoto(compressedImage)
 
-      if (uploadError) throw new Error(`Error subiendo foto de prueba: ${uploadError.message}`)
-
-      const { data } = supabase.storage
-        .from('report-photos')
-        .getPublicUrl(filePath)
-
-      const publicUrl = data.publicUrl
-
-      // 2. Actualizar el registro en la base de datos
-      const { error: updateError } = await supabase
-        .from('reports')
-        .update({
-          status: 'resolved',
-          resolved_image: publicUrl,
-          resolved_at: new Date().toISOString()
-        })
-        .eq('id', report.id)
-
-      if (updateError) throw updateError
+      // 3. Actualizar el registro en la base de datos
+      const resolvedAt = new Date().toISOString()
+      const updated = await reportsService.updateReportStatus(report.id, 'resolved', {
+        resolved_image: publicUrl,
+        resolved_at: resolvedAt
+      })
 
       // Actualizar vista local
       onStatusUpdated({
         ...report,
+        ...updated,
         status: 'resolved',
         resolved_image: publicUrl,
-        resolved_at: new Date().toISOString()
+        resolved_at: resolvedAt
       })
       
       setShowResolveForm(false)
@@ -117,15 +87,11 @@ export default function ReportDetail({
   const handleSetInProgress = async () => {
     setLoading(true)
     try {
-      const { error: updateError } = await supabase
-        .from('reports')
-        .update({ status: 'in_progress' })
-        .eq('id', report.id)
-
-      if (updateError) throw updateError
+      const updated = await reportsService.updateReportStatus(report.id, 'in_progress')
 
       onStatusUpdated({
         ...report,
+        ...updated,
         status: 'in_progress'
       })
     } catch (err) {
@@ -143,13 +109,7 @@ export default function ReportDetail({
 
     setLoading(true)
     try {
-      const { error: deleteError } = await supabase
-        .from('reports')
-        .delete()
-        .eq('id', report.id)
-
-      if (deleteError) throw deleteError
-
+      await reportsService.deleteReport(report.id)
       alert('Reporte eliminado con éxito.')
       onBack() // Regresa al listado
     } catch (err) {
@@ -172,20 +132,8 @@ export default function ReportDetail({
 
     setLoading(true)
     try {
-      const { error: banError } = await supabase
-        .from('banned_ips')
-        .insert([{ ip_address: report.ip_address, reason }])
-
-      if (banError) {
-        if (banError.code === '23505') {
-          alert('Esta IP ya se encuentra bloqueada.')
-        } else {
-          throw banError
-        }
-        return
-      }
-
-      alert(`La dirección IP ${report.ip_address} ha sido bloqueada. El usuario no podrá enviar más reportes.`);
+      await moderationService.banIp(report.ip_address, reason)
+      alert(`La dirección IP ${report.ip_address} ha sido bloqueada. El usuario no podrá enviar más reportes.`)
     } catch (err) {
       console.error('Error al bloquear IP:', err)
       alert('Error al bloquear la IP: ' + err.message)

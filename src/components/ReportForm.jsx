@@ -1,36 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { supabase } from '../supabaseClient'
 import { MapPin, Image as ImageIcon, Loader2, X, AlertCircle } from 'lucide-react'
-
-// Barrios principales de Gral. Pueyrredón para el selector
-const NEIGHBORHOODS = [
-  'Centro',
-  'Stella Maris / Los Troncos',
-  'Playa Grande / Alem',
-  'La Perla / Constitución',
-  'Puerto / Colinas de Peralta Ramos',
-  'Punta Mogotes',
-  'Chauvín / San José',
-  'Caisamar / Grosellar',
-  'Pompeya / Estación',
-  'Batán',
-  'Sierra de los Padres',
-  'Parque Camet / Las Dalias',
-  'Plaza Mitre',
-  'Constitución',
-  'Florencia Varela / Aeropuerto',
-  'Alfar / Playas del Sur',
-  'Otro'
-].sort()
-
-const CATEGORIES = [
-  { value: 'calles', label: 'Baches / Calles' },
-  { value: 'alumbrado', label: 'Luminarias / Alumbrado' },
-  { value: 'limpieza', label: 'Basura / Limpieza' },
-  { value: 'veredas', label: 'Veredas rotas' },
-  { value: 'pluviales', label: 'Pluviales / Inundación' },
-  { value: 'otro', label: 'Otros problemas' }
-]
+import { CATEGORIES } from '../constants/categories'
+import { NEIGHBORHOODS } from '../constants/neighborhoods'
+import { geocodingService } from '../services/geocodingService'
+import { storageService } from '../services/storageService'
+import { reportsService } from '../services/reportsService'
+import { votesService } from '../services/votesService'
+import { compressImage } from '../utils/imageCompressor'
 
 export default function ReportForm({ location, onCancel, onSubmitSuccess }) {
   const [category, setCategory] = useState('')
@@ -47,52 +23,18 @@ export default function ReportForm({ location, onCancel, onSubmitSuccess }) {
 
   // 1. Obtener la IP pública al cargar
   useEffect(() => {
-    fetch('https://api.ipify.org?format=json')
-      .then((res) => res.json())
-      .then((data) => setClientIp(data.ip))
-      .catch((err) => {
-        console.warn('No se pudo determinar la IP del cliente:', err)
-        setClientIp('127.0.0.1') // Fallback local
-      })
+    geocodingService.getClientIp().then(setClientIp)
   }, [])
 
   // 2. Autocompletar dirección con Nominatim API al cambiar coordenadas
   useEffect(() => {
     if (location) {
       setGeocoding(true)
-      fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${location.lat}&lon=${location.lng}&format=json&accept-language=es`
-      )
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.address) {
-            const road = data.address.road || ''
-            const houseNumber = data.address.house_number || ''
-            const suburb = data.address.suburb || data.address.neighbourhood || ''
-            
-            const approxAddress = road 
-              ? `${road}${houseNumber ? ' ' + houseNumber : ''}` 
-              : data.display_name.split(',').slice(0, 2).join(',')
-              
-            setAddress(approxAddress)
-
-            // Intentar matchear barrio
-            if (suburb) {
-              const matched = NEIGHBORHOODS.find((b) => 
-                b.toLowerCase().includes(suburb.toLowerCase()) || 
-                suburb.toLowerCase().includes(b.toLowerCase())
-              )
-              if (matched) {
-                setNeighborhood(matched)
-              } else {
-                setNeighborhood('Otro')
-              }
-            } else {
-              setNeighborhood('Otro')
-            }
-          }
+      geocodingService.reverseGeocode(location.lat, location.lng)
+        .then(({ address: approxAddress, neighborhood: matchedNeighborhood }) => {
+          if (approxAddress) setAddress(approxAddress)
+          if (matchedNeighborhood) setNeighborhood(matchedNeighborhood)
         })
-        .catch((err) => console.error('Error reverse geocoding:', err))
         .finally(() => setGeocoding(false))
     }
   }, [location])
@@ -140,56 +82,32 @@ export default function ReportForm({ location, onCancel, onSubmitSuccess }) {
     try {
       const imageUrls = []
 
-      // 1. Subir fotos si existen al Storage de Supabase
+      // 1. Comprimir fotos en el cliente y subirlas al Storage
       for (const file of images) {
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${crypto.randomUUID()}.${fileExt}`
-        const filePath = `reports/${fileName}`
-
-        const { error: uploadError } = await supabase.storage
-          .from('report-photos')
-          .upload(filePath, file)
-
-        if (uploadError) throw new Error(`Error al subir imagen: ${uploadError.message}`)
-
-        const { data } = supabase.storage
-          .from('report-photos')
-          .getPublicUrl(filePath)
-
-        imageUrls.push(data.publicUrl)
+        const compressed = await compressImage(file, { maxWidth: 1600, quality: 0.8 })
+        const publicUrl = await storageService.uploadReportPhoto(compressed)
+        imageUrls.push(publicUrl)
       }
 
       // Obtener el voter_id como client_id para tracking de límites
-      const clientId = localStorage.getItem('voter_id')
+      const clientId = votesService.getVoterId()
 
-      // 2. Insertar reporte en la base de datos (con IP y Client ID)
-      const { error: insertError } = await supabase
-        .from('reports')
-        .insert([
-          {
-            category,
-            description,
-            address,
-            neighborhood,
-            latitude: location.lat,
-            longitude: location.lng,
-            images: imageUrls,
-            status: 'pending',
-            votes_count: 0,
-            ip_address: clientIp,
-            client_id: clientId
-          }
-        ])
-
-      // Si hay error en la base de datos (ej. disparador de baneo o límites de spam)
-      if (insertError) {
-        throw new Error(insertError.message || 'Error al guardar el reporte.')
-      }
+      // 2. Insertar reporte en la base de datos a través del servicio
+      await reportsService.createReport({
+        category,
+        description,
+        address,
+        neighborhood,
+        latitude: location.lat,
+        longitude: location.lng,
+        images: imageUrls,
+        ipAddress: clientIp,
+        clientId
+      })
 
       onSubmitSuccess()
     } catch (err) {
       console.error('Error insertando reporte:', err)
-      // Capturar específicamente el error del trigger de Supabase y formatearlo
       let cleanErrorMessage = err.message
       if (cleanErrorMessage.includes('row-level security policy')) {
         cleanErrorMessage = 'No tienes permisos para realizar esta acción.'
@@ -305,7 +223,7 @@ export default function ReportForm({ location, onCancel, onSubmitSuccess }) {
             <div className="file-upload-content">
               <ImageIcon className="file-upload-icon" />
               <span>Haz clic aquí o arrastra tus fotos</span>
-              <span className="helper-text">Formatos JPG, PNG</span>
+              <span className="helper-text">Formatos JPG, PNG (se optimizan automáticamente)</span>
             </div>
           </div>
 

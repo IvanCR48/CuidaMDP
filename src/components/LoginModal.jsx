@@ -1,12 +1,14 @@
 import React, { useState } from 'react'
-import { supabase } from '../supabaseClient'
 import { X, Lock, Mail, Loader2, AlertCircle } from 'lucide-react'
+import { useAuth } from '../hooks/useAuth'
 
 export default function LoginModal({ isOpen, onClose }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  const { login } = useAuth()
 
   if (!isOpen) return null
 
@@ -16,12 +18,7 @@ export default function LoginModal({ isOpen, onClose }) {
     setError(null)
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
-
-      if (signInError) throw signInError
+      await login(email, password)
       onClose() // Cerrar modal al loguearse con éxito
     } catch (err) {
       console.error('Error al iniciar sesión:', err)
