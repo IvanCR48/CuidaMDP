@@ -4,7 +4,7 @@
   <img src="img/logo.jpg" alt="RobosMDP Logo" width="120" style="border-radius: 50%;" />
 </p>
 
-En Mar del Plata los hechos delictivos y las zonas oscuras o peligrosas suelen quedar dispersos en grupos de Facebook o cadenas de WhatsApp que nadie sistematiza. Armé **RobosMDP** para que cualquier vecino pueda marcar el punto exacto en el mapa, adjuntar una foto y avisar en tiempo real qué pasó en su cuadra, sin vueltas ni formularios de diez páginas.
+En Mar del Plata los hechos delictivos y las zonas oscuras o peligrosas suelen quedar dispersos en grupos de Facebook o cadenas de WhatsApp que nadie sistematiza. Reimaginé **RobosMDP** para que cualquier vecino pueda marcar el punto exacto en el mapa, adjuntar una foto y avisar en tiempo real qué pasó en su cuadra, sin vueltas ni formularios de diez páginas.
 
 ---
 
