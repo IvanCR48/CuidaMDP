@@ -19,7 +19,7 @@ create table if not exists public.reports (
   resolved_at timestamp with time zone,
   neighborhood text not null,
   
-  -- Nuevas columnas de seguridad
+  -- Columnas de seguridad y control de límites
   ip_address text,
   client_id uuid
 );
@@ -46,20 +46,22 @@ alter table public.votes enable row level security;
 alter table public.banned_ips enable row level security;
 
 -- 5. Crear políticas de acceso para la tabla 'reports'
--- Permitir que cualquiera lea los reportes
+-- Permitir que cualquiera lea los reportes cívicos
 create policy "Cualquiera puede ver reportes" 
   on public.reports for select 
   using (true);
 
--- Permitir que cualquiera cree reportes
+-- Permitir que cualquiera cree reportes cívicos
 create policy "Cualquiera puede crear reportes" 
   on public.reports for insert 
   with check (true);
 
--- Permitir que cualquiera actualice reportes (para cambiar estado a Resuelto o sumar votos)
-create policy "Cualquiera puede actualizar reportes" 
+-- Solo los empleados autenticados pueden actualizar reportes (cambiar a 'en proceso', 'resuelto', etc.)
+create policy "Empleados pueden actualizar reportes" 
   on public.reports for update 
-  using (true);
+  to authenticated
+  using (true)
+  with check (true);
 
 -- Solo los empleados (usuarios autenticados en Supabase) pueden borrar reportes
 create policy "Empleados pueden borrar reportes" 
@@ -77,12 +79,7 @@ create policy "Cualquiera puede votar"
   with check (true);
 
 -- 7. Crear políticas de acceso para la tabla 'banned_ips'
--- Permitir que cualquiera lea la tabla de IPs baneadas (necesario para verificar)
-create policy "Cualquiera puede ver IPs baneadas"
-  on public.banned_ips for select
-  using (true);
-
--- Solo los empleados (usuarios autenticados) pueden gestionar baneos
+-- La lista de IPs baneadas es privada (solo accesible por personal municipal autenticado)
 create policy "Empleados pueden gestionar baneos"
   on public.banned_ips for all
   to authenticated
@@ -140,3 +137,10 @@ create or replace trigger before_report_inserted
   before insert on public.reports
   for each row
   execute function public.check_report_limits();
+
+-- 10. Índices B-Tree de alto rendimiento para escalabilidad
+create index if not exists idx_reports_status on public.reports(status);
+create index if not exists idx_reports_neighborhood on public.reports(neighborhood);
+create index if not exists idx_reports_created_at on public.reports(created_at desc);
+create index if not exists idx_votes_report_id on public.votes(report_id);
+create index if not exists idx_reports_ip_client on public.reports(ip_address, client_id, created_at);
