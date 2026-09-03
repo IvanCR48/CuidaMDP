@@ -1,27 +1,42 @@
 import React from 'react'
 import { MapPin, List, BarChart3, Sun, Moon, Shield, LogOut } from 'lucide-react'
-import { supabase } from '../supabaseClient'
+import { useAuth } from '../hooks/useAuth'
 
 export default function Navbar({ 
   activeTab, 
   setActiveTab, 
   theme, 
   toggleTheme, 
-  employeeSession, 
   onOpenLogin 
 }) {
+  const { isEmployee, user, logout } = useAuth()
   
   const handleLogout = async () => {
     if (window.confirm('¿Deseas cerrar tu sesión de empleado?')) {
-      await supabase.auth.signOut()
+      try {
+        await logout()
+      } catch (error) {
+        console.error('Error cerrando sesión:', error)
+      }
     }
   }
 
   return (
     <nav className="navbar">
-      <div className="nav-brand">
-        <MapPin size={28} strokeWidth={2.5} />
-        <span>Cuida<strong>MDP</strong></span>
+      <div className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <img 
+          src="/logo.jpg" 
+          alt="RobosMDP Logo" 
+          style={{ 
+            width: '38px', 
+            height: '38px', 
+            borderRadius: '50%', 
+            objectFit: 'cover',
+            border: '2px solid var(--border-color)',
+            boxShadow: 'var(--shadow-btn-hover)'
+          }} 
+        />
+        <span>Robos<strong>MDP</strong></span>
       </div>
 
       <div className="nav-tabs">
@@ -60,8 +75,8 @@ export default function Navbar({
         </button>
 
         {/* Control de Acceso Empleados */}
-        {employeeSession ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} title={`Sesión activa: ${employeeSession.user.email}`}>
+        {isEmployee ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} title={`Sesión activa: ${user?.email}`}>
             <span style={{ 
               fontSize: '0.8rem', 
               color: 'var(--success)', 
